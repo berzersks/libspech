@@ -185,8 +185,6 @@ Framework de teste ainda não implementado.
 
 - Apenas IPv4 (suporte a IPv6 não implementado)
 - Sem suporte SRTP/TLS
-- Negociação limitada de SDP
-- Sem transcodificação de mídia entre codecs
 
 ## Contribuindo
 
