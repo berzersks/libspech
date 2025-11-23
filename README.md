@@ -11,14 +11,14 @@ com corrotinas Swoole. Realize chamadas VoIP reais com transmissão e recepção
 
 ## Características Principais
 
-- ✅ **Chamadas VoIP bidirecionais** - Transmissão e recepção simultânea de áudio em tempo real
-- ✅ **Streaming RTP/RTCP** - Protocolo de transporte de mídia com controle de qualidade
-- ✅ **Múltiplos codecs** - PCMU, PCMA, G.729, Opus, L16 com conversão automática
-- ✅ **Registro SIP** - Autenticação MD5 Digest completa
-- ✅ **Eventos assíncronos** - Callbacks para ringing, answer, hangup, receive audio
-- ✅ **Alta performance** - Assíncrono e não-bloqueante com Swoole
-- ✅ **DTMF (RFC 2833)** - Envio de tons de teclado telefônico
-- ✅ **Gravação de áudio** - Captura em formato WAV
+- **Chamadas VoIP bidirecionais** - Transmissão e recepção simultânea de áudio em tempo real
+- **Streaming RTP/RTCP** - Protocolo de transporte de mídia com controle de qualidade
+- **Múltiplos codecs** - PCMU, PCMA, G.729, Opus, L16 com conversão automática
+- **Registro SIP** - Autenticação MD5 Digest completa
+- **Eventos assíncronos** - Callbacks para ringing, answer, hangup, receive audio
+- **Alta performance** - Assíncrono e não-bloqueante com Swoole
+- **DTMF (RFC 2833)** - Envio de tons de teclado telefônico
+- **Gravação de áudio** - Captura em formato WAV
 
 ## Índice
 
@@ -156,12 +156,12 @@ php example.php
 
 ## Casos de Uso
 
-- 🤖 **Bots de voz automatizados** - IVR (URA), assistentes virtuais
-- 📞 **Softphones em PHP** - Aplicações de telefonia integradas
-- 🎙️ **Gravação de chamadas** - Captura e processamento de áudio em tempo real
-- 🔊 **Análise de voz** - Processamento para transcrição ou análise
-- 🔗 **Integração VoIP** - Conectar aplicações PHP a infraestrutura VoIP existente
-- 🧪 **Testes automatizados** - Simulação de chamadas e validação de sistemas
+- **Bots de voz automatizados** - IVR (URA), assistentes virtuais
+- **Softphones em PHP** - Aplicações de telefonia integradas
+- **Gravação de chamadas** - Captura e processamento de áudio em tempo real
+- **Análise de voz** - Processamento para transcrição ou análise
+- **Integração VoIP** - Conectar aplicações PHP a infraestrutura VoIP existente
+- **Testes automatizados** - Simulação de chamadas e validação de sistemas
 
 ## Estrutura do Projeto
 
@@ -192,14 +192,25 @@ libspech/
 
 ## Codecs Suportados
 
-| Codec                  | PT  | Taxa  | Status     | Extensão                                          |
-|------------------------|-----|-------|------------|---------------------------------------------------|
-| **PCMU (G.711 μ-law)** | 0   | 8kHz  | ✅ Completo | Nativa                                            |
-| **PCMA (G.711 A-law)** | 8   | 8kHz  | ✅ Completo | Nativa                                            |
-| **G.729**              | 18  | 8kHz  | ✅ Completo | [bcg729](https://github.com/berzersks/bcg729)     |
-| **Opus**               | 111 | 48kHz | 🚧 Beta    | [opus](https://github.com/berzersks/opus)         |
-| **L16**                | 96  | 8kHz  | ✅ Completo | [psampler](https://github.com/berzersks/psampler) |
-| **telephone-event**    | 101 | 8kHz  | ✅ DTMF     | Nativa                                            |
+| Codec                  | PT  | Taxa  | Status   | Extensão                                          |
+|------------------------|-----|-------|----------|---------------------------------------------------|
+| **PCMU (G.711 μ-law)** | 0   | 8kHz  | Completo | Nativa                                            |
+| **PCMA (G.711 A-law)** | 8   | 8kHz  | Completo | Nativa                                            |
+| **G.729**              | 18  | 8kHz  | Completo | [bcg729](https://github.com/berzersks/bcg729)     |
+| **Opus**               | 111 | 48kHz | Beta     | [opus](https://github.com/berzersks/opus)         |
+| **L16**                | 96  | 8kHz  | Completo | [psampler](https://github.com/berzersks/psampler) |
+| **telephone-event**    | 101 | 8kHz  | DTMF     | Nativa                                            |
+
+### Suporte a Múltiplos Codecs
+
+O sistema de media channel (`rtpChannels.php`) suporta múltiplos codecs simultaneamente:
+
+- **Negociação automática** - Múltiplos codecs podem ser oferecidos via SDP, o endpoint remoto seleciona um
+- **Detecção automática** - Identifica codecs pelos RTP payload types quando necessário
+- **Configuração runtime** - Use `mountLineCodecSDP()` para especificar codecs preferidos
+- **Fallback inteligente** - Padrão PCMU/PCMA se nenhum codec for especificado
+- **Troca entre chamadas** - Codecs diferentes podem ser usados em cada chamada
+- **Extensível** - Novos codecs podem ser adicionados facilmente ao sistema
 
 ### Configurar Codec
 
@@ -316,12 +327,12 @@ echo "Compressão: " . round((1 - strlen($g729Data)/strlen($pcm)) * 100) . "%\n"
 
 ## Limitações
 
-| Item                      | Status                 |
-|---------------------------|------------------------|
-| IPv6                      | ❌ Não suportado        |
-| SRTP/TLS                  | ❌ Sem criptografia     |
-| Chamadas de entrada       | ❌ Apenas saída         |
-| Transcodificação dinâmica | ❌ Um codec por chamada |
+| Item                     | Status                                       |
+|--------------------------|----------------------------------------------|
+| IPv6                     | Não suportado                                |
+| SRTP/TLS                 | Sem criptografia                             |
+| Chamadas de entrada      | Apenas saída (servidor SIP não implementado) |
+| Codec switching mid-call | Não suportado (requer re-INVITE)             |
 
 ## Contribuindo
 
@@ -359,8 +370,8 @@ individuais.
 
 ## Suporte
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/berzersks/libspech/issues)
-- 💬 **Discussões**: [GitHub Discussions](https://github.com/berzersks/libspech/discussions)
+- **Issues**: [GitHub Issues](https://github.com/berzersks/libspech/issues)
+- **Discussões**: [GitHub Discussions](https://github.com/berzersks/libspech/discussions)
 
 ---
 
@@ -374,4 +385,4 @@ individuais.
 
 ---
 
-**Desenvolvido para a comunidade PHP VoIP** 🚀
+**Desenvolvido para a comunidade PHP VoIP**
