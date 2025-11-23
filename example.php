@@ -18,7 +18,7 @@ include 'plugins/autoloader.php';
         throw new \Exception("Erro ao registrar");
     }
     $audioBuffer = '';
-    $phone->mountLineCodecSDP('PCMA/8000');
+    $phone->mountLineCodecSDP('L16/8000');
 
 
     $phone->onRinging(function ($call) {
@@ -38,6 +38,7 @@ include 'plugins/autoloader.php';
 
     });
 
+
     $phone->onReceiveAudio(function ($pcmData, $peer) use (&$audioBuffer) {
 
         $audioBuffer .= $pcmData;
@@ -50,6 +51,7 @@ include 'plugins/autoloader.php';
 
     $phone->prefix = 4479;
     $phone->call('551140040104');
+
 
 
 });

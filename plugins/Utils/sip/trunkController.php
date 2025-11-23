@@ -24,21 +24,6 @@ function secure_random_bytes(int $length): string
 
 class trunkController
 {
-    public static array $supportedCodecStatic = [
-        0 => ["rtpmap:0 PCMU/8000"],
-        18 => [
-            "rtpmap:18 G729/8000",
-            "fmtp:18 annexb=no",
-        ],
-        8 => [
-            "rtpmap:8 PCMA/8000",
-            "maxptime:150",
-        ],
-        101 => [
-            "rtpmap:101 telephone-event/8000",
-            "fmtp:101 0-16",
-        ],
-    ];
     public bool $callableRingInvoked = false;
     public mixed $username;
     public mixed $password;
@@ -234,7 +219,8 @@ class trunkController
         $this->calledNumber = "";
 
         $this->csq = rand(100, 99999);
-        $this->rtpChan = new rtpChannels(8);
+
+
         $this->ssrc = random_int(0, 0xffffffff);
         $this->callId = bin2hex(secure_random_bytes(8));
         $this->socket = new Socket(AF_INET, SOCK_DGRAM, SOL_UDP);
@@ -262,12 +248,10 @@ class trunkController
 
 
         $this->socket->sendto($this->host, $this->port, sip::renderSolution($this->modelOptions()));
-
         $this->userAgent = 'SPECHSHOP LIB';
 
         /** @var ? $peer */
         print $this->socket->recvfrom($peer, 1);
-        $this->mountLineCodecSDP();
 
 
     }
@@ -1337,7 +1321,6 @@ class trunkController
         ];
 
 
-
         if (strlen($prefix) > 0) {
             $to = $prefix . $to;
         }
@@ -1419,6 +1402,7 @@ class trunkController
 
     public function receiveMedia(): void
     {
+
         Coroutine::create(function () {
             if ($this->socketInUse !== false) return false;
 
@@ -1449,143 +1433,61 @@ class trunkController
             $audioFile = $this->audioFilePath;
 
 
-            Coroutine::create(function () use ($audioFinished, $audioPosition, $silPayload20ms) {
-                $lastPacketTime = microtime(true);
-                cli::pcl("🎧 Recepção de mídia iniciada", 'green');
- if (!empty($this->audioFilePath) && file_exists($this->audioFilePath)) {
-                $audioFile = fopen($this->audioFilePath, 'rb');
-                if ($audioFile) {
-                    fseek($audioFile, 44);
-                    $audioData = fread($audioFile, filesize($this->audioFilePath) - 44);
-                    fclose($audioFile);
-                    print cli::cl("bold_cyan", "Áudio carregado: {$this->audioFilePath}");
-                } else {
-                    print cli::cl("bold_red", "Erro ao abrir arquivo de áudio: {$this->audioFilePath}");
-                }
-            }
-            go(function () use ($audioFile, $silPayload20ms, $audioData, $audioPosition, $audioFinished) {
-                while (true) {
-                    if ($this->receiveBye) {
-                        cli::pcl("LOOP RECMEDIA FINALIZADO", 'bold_red');
-                        return false;
-                    }
-                    if ($this->error) {
-                        cli::pcl("LOOP RECMEDIA FINALIZADO", 'bold_red');
-                        return false;
-                    }
-                    if (!$this->callActive) {
-                        cli::pcl("LOOP RECMEDIA FINALIZADO", 'bold_red');
-
-                        return false;
-                    }
+            $rtpSocket = new Swoole\Coroutine\Socket(AF_INET, SOCK_DGRAM, 0);
+            $rtpSocket->bind($this->localIp, $this->audioReceivePort);
+            $rtpSocket->connect($this->remoteIp, $this->remotePort);
 
 
-                    // Preparar payload de áudio
-                    $audioPayload = $silPayload20ms;
-                    if ($audioData && !$audioFinished) {
-                        $chunkSize = 320;
-                        if ($audioPosition + $chunkSize <= strlen($audioData)) {
-                            $pcmChunk = substr($audioData, $audioPosition, $chunkSize);
-                            $audioPosition += $chunkSize;
-                            $audioPayload = resampler($pcmChunk, 8000, $this->frequencyCall, $this->codecName == 'L16');
-                        } else {
-                            $audioPayload = resampler($silPayload20ms, 8000, $this->frequencyCall, $this->codecName == 'L16');
-                            $this->newSound = true;
-                            print cli::cl("bold_yellow", "Reprodução de áudio finalizada");
-                        }
-                    } else {
-                        $audioPayload = str_repeat("\x00\x00", 160);
-                    }
+            $media = new MediaChannel($rtpSocket, $this->callId);
+            $media->portList = $this->audioReceivePort;
+
+            $media->codecMapper = [
+                $this->ptUse => strtoupper(implode('/', [
+                    $this->codecName,
+                    $this->frequencyCall,
+                ])),
+            ];
+            $media->registerPtCodecs($media->codecMapper);
 
 
-                    //
-
-                    $audioPayload = ($this->onBuildAudio)($audioPayload);
-                    cli::pcl($this->codecName . " - " . strlen($audioPayload) . " bytes", 'bold_green');
-                    $encodedData = match (strtoupper($this->codecName)) {
-                        'PCMU' => encodePcmToPcmu($audioPayload),
-                        'PCMA' => encodePcmToPcma($audioPayload),
-                        'G729' => $this->channel->encode($audioPayload),
-                        'OPUS' => $this->opusChannel->encode($audioPayload, $this->frequencyCall),
-                        'L16' => resampler($audioPayload, 8000, $this->frequencyCall, true),
-                        default => $audioPayload,
-                    };
-                    $this->rtpChan->setSsrc($this->ssrc);
-                    $this->rtpChan->setPayloadType($this->codecReceiveType);
+            $media->addMember([
+                'address' => $this->audioRemoteIp,
+                'port' => $this->audioRemotePort,
+                'codec' => $this->codecName,
+                'pt' => $this->ptUse,
+                'timestamp' => time(),
+                'config' => [],
+                'ssrc' => $this->ssrc,
+                'frequency' => $this->frequencyCall,
+            ]);
 
 
-                    $packet = $this->rtpChan->buildAudioPacket($encodedData);
+            $rtpChannel = new RtpChannel($this->ptUse, $this->frequencyCall, 20, $this->ssrc);
+            $media->onReceive(function (rtpc $rtpc, array $peer, MediaChannel $channel) use ($rtpSocket, $rtpChannel, $silPayload20ms) {
+                $fp = $rtpChannel->buildAudioPacket($silPayload20ms);
+                $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
+                $targetId = $peer['address'] . ':' . $peer['port'];
+                $ssrc = $rtpc->ssrc;
+                $codec = $this->codecName;
 
-
-                    $this->rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $packet);
-                    Coroutine::sleep(0.20);
-
-                }
+                $pcmData = match (strtoupper($codec)) {
+                    'G729' => $channel->rtpChans[$ssrc]->bcg729Channel->decode($rtpc->payloadRaw),
+                    'PCMU' => decodePcmuToPcm($rtpc->payloadRaw),
+                    'PCMA' => decodePcmaToPcm($rtpc->payloadRaw),
+                    'OPUS' => $channel->members[$targetId]['opus']->decode($rtpc->payloadRaw),
+                    'L16' => pcmLeToBe($rtpc->payloadRaw),
+                    default => $rtpc->payloadRaw,
+                };
+                $this->bufferAudio .= $pcmData;
             });
-                while ($this->callActive) {
-                    $packet = $this->rtpSocket->recvfrom($peer, 0.2);
-                    if (!$packet) {
-                        if ($this->speakWait) {
-                            $this->speakWaitSequence[] = str_repeat("\x00\x00", 160);
-                        }
-                    }
-                    $currentTime = microtime(true);
-                    if ($this->receiveBye) {
-                        cli::pcl("LOOP RECMEDIA FINALIZADO", 'bold_red');
-                        return false;
-                    }
-                    if ($this->error) {
-                        cli::pcl("LOOP RECMEDIA FINALIZADO", 'bold_red');
-                        return false;
-                    }
 
-                    $lastPacketTime = $currentTime;
+            $fp = $rtpChannel->buildAudioPacket($silPayload20ms);
+            $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
+            $media->start();
+  $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
 
-
-                    $rtpc = new rtpc($packet);
-                    if (!$rtpc || strlen($packet) < 12) {
-                        continue;
-                    }
-
-                    $codecName = null;
-                    $frequency = $this->frequencyCall;
-                    $pt = $rtpc->getCodec();
-                    $codecName = strtoupper($this->codecName);
-                    if (!$codecName) continue;
-
-                    // Verificar se é DTMF
-                    if ($pt === 101) continue;
-                    if ($peer['address'] && $peer['port']) {
-
-                    }
-
-
-                    $this->codecReceiveType = $pt;
-
-                    $pcmData = match (strtoupper($codecName)) {
-                        'PCMU' => decodePcmuToPcm($rtpc->payloadRaw),
-                        'PCMA' => decodePcmaToPcm($rtpc->payloadRaw),
-                        'G729' => $this->channel->decode($rtpc->payloadRaw),
-                        'OPUS' => $this->opusChannel->decode($rtpc->payloadRaw),
-                        'L16' => pcmLeToBe($rtpc->payloadRaw),
-                        default => $rtpc->payloadRaw,
-                    };
-                    if (is_callable($this->onReceiveAudioCallback)) {
-                        go($this->onReceiveAudioCallback, $pcmData, $peer);
-                    }
-
-                    $this->bufferAudio .= $pcmData;
-
-
-
-
-                    // Debug opcional
-                    // self::pcl("🎵 {$codecName} PT:{$pt} {$frequency}Hz {$channels}ch - " . strlen($rtpc->payloadRaw) . "B", 'cyan');
-
-                }
-
-                cli::pcl("🛑 Recepção de mídia finalizada", 'red');
-            });
+            $media->block();
+            var_dump($rtpSocket->getpeername());
 
 
         });
@@ -2019,10 +1921,10 @@ class trunkController
     public function saveBufferToWavFile(string $caminho, string $audioBuffer): void
     {
         go(function ($audioBuffer, $caminho) {
-            $audioBuffer = resampler($audioBuffer, $this->frequencyCall, min(8000, intdiv($this->frequencyCall, 2)));
+            $audioBuffer = resampler($audioBuffer, $this->frequencyCall, $this->frequencyCall);
 
 
-            $audio = waveHead3(strlen($audioBuffer), min(8000, intdiv($this->frequencyCall, 2)), 1, 1) . $audioBuffer;
+            $audio = waveHead3(strlen($audioBuffer), $this->frequencyCall, 1, 1) . $audioBuffer;
             Coroutine::writeFile($caminho, $audio);
         }, $audioBuffer, $caminho);
     }
