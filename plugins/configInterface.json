@@ -1,0 +1,15 @@
+{
+  "autoload": [
+    "Utils/cache",
+    "Utils/cli",
+    "Utils/sip",
+    "Start/events",
+    "Packet/controller",
+    "Packet/routes",
+    "Start/console",
+    "Extension/plugins",
+    "Extension/terminal",
+     "Utils/network"
+   ],
+  "reloadCaseFileModify": []
+}
