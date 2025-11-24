@@ -23,42 +23,20 @@ Este README reflete o repositório a partir de 2025-11-24.
 ## Stack
 
 - Linguagem: PHP (sem Composer neste repositório)
-- Framework/runtime: Corrotinas Swoole (extensão PECL)
+- Framework/runtime: Corrotinas Swoole (incluído nas releases pcg729)
 - Protocolos: SIP, RTP/RTCP, SDP, DTMF (RFC 2833)
-- Extensões nativas opcionais: `bcg729`, `opus`, `psampler` (veja abaixo)
+- Extensões nativas: `bcg729`, `opus`, `psampler` (incluídas nas releases pcg729)
 
 ## Requisitos
 
-- PHP 8.4+ (CLI)
-- PECL Swoole 6.0+ habilitado: `php -m | grep swoole`
 - Linux/macOS recomendado
-- Extensões de codec opcionais para payloads adicionais (veja seção Codecs)
+- Releases do [berzersks/pcg729](https://github.com/berzersks/pcg729/releases) que incluem PHP 8.4+ com Swoole, bcg729 (baseado no Belladone BCG729), Opus e psampler pré-compilados
 
-Instalação rápida (Swoole):
+## Instalação
 
-```bash
-pecl install swoole
-php -m | grep swoole
-```
+Baixe a última release do [berzersks/pcg729](https://github.com/berzersks/pcg729/releases). Esta release inclui todas as extensões necessárias (Swoole, bcg729 baseado no Belladone BCG729, Opus, psampler) pré-compiladas e prontas para uso.
 
-Extensões opcionais (instale apenas se precisar):
-
-```bash
-# G.729 (opcional)
-git clone https://github.com/berzersks/bcg729.git && cd bcg729
-phpize && ./configure && make && sudo make install
-echo "extension=bcg729.so" | sudo tee -a "$(php -r 'echo php_ini_loaded_file();')"
-
-# Opus (opcional)
-git clone https://github.com/berzersks/opus.git && cd opus
-phpize && ./configure && make && sudo make install
-echo "extension=opus.so" | sudo tee -a "$(php -r 'echo php_ini_loaded_file();')"
-
-# psampler (opcional)
-git clone https://github.com/berzersks/psampler.git && cd psampler
-phpize && ./configure && make && sudo make install
-echo "extension=psampler.so" | sudo tee -a "$(php -r 'echo php_ini_loaded_file();')"
-```
+Siga as instruções de instalação fornecidas na release para configurar o ambiente.
 
 ## Começando
 
@@ -174,9 +152,9 @@ Payloads suportados/disponíveis no codebase:
 |------------------------|-----------------|---------------------|----------|-------------------------------------------------|
 | PCMU (G.711 µ-law)     | 0               | 8 kHz               | Integrado | Nenhuma extensão extra necessária               |
 | PCMA (G.711 A-law)     | 8               | 8 kHz               | Integrado | Nenhuma extensão extra necessária               |
-| G.729                  | 18              | 8 kHz               | Opcional | Extensão PHP `bcg729` (baseado no Belladone BCG729) |
-| Opus                   | 111             | 48 kHz              | Opcional | Extensão PHP `opus`                            |
-| L16 (Linear PCM)       | 96              | 8 kHz               | Integrado | `psampler` recomendado para reamostragem       |
+| G.729                  | 18              | 8 kHz               | Integrado | Incluído na release pcg729 (baseado no Belladone BCG729) |
+| Opus                   | 111             | 48 kHz              | Integrado | Incluído na release pcg729                      |
+| L16 (Linear PCM)       | 96              | 8 kHz               | Integrado | psampler incluído para reamostragem            |
 | telephone-event (DTMF) | 101             | 8 kHz               | Integrado | RFC 2833 para sinalização DTMF                 |
 
 Notas:
