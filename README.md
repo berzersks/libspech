@@ -4,67 +4,67 @@
 [![Swoole](https://img.shields.io/badge/Swoole-6.0+-green.svg)](https://www.swoole.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Real-time SIP/RTP VoIP library for PHP, built on Swoole coroutines. Make and receive real phone calls from PHP, stream
-RTP audio, handle DTMF, and record audio.
+Biblioteca VoIP SIP/RTP em tempo real para PHP, construída com corrotinas Swoole. Faça e receba chamadas telefônicas de PHP, transmita
+audio RTP, manipule DTMF e grave áudio.
 
-## Overview
+## Visão Geral
 
-libspech provides:
+libspech fornece:
 
-- SIP user-agent features: registration, call setup/teardown (INVITE/200/ACK/BYE), digest auth
-- RTP/RTCP media channels: receive and send audio frames
-- Event-driven API with callbacks for ringing, answer, hangup, and incoming audio
-- DTMF (RFC 2833) sending
-- WAV recording helpers for captured PCM
-- High performance async I/O via Swoole
+- Recursos de user-agent SIP: registro, configuração/desmontagem de chamadas (INVITE/200/ACK/BYE), autenticação digest
+- Canais de mídia RTP/RTCP: receber e enviar quadros de áudio
+- API orientada a eventos com callbacks para toque, resposta, desligamento e áudio recebido
+- Envio de DTMF (RFC 2833)
+- Auxiliares de gravação WAV para PCM capturado
+- I/O assíncrono de alto desempenho via Swoole
 
-This README reflects the repository as of 2025-11-23.
+Este README reflete o repositório a partir de 2025-11-24.
 
 ## Stack
 
-- Language: PHP (no Composer in this repo)
-- Framework/runtime: Swoole coroutines (PECL extension)
-- Protocols: SIP, RTP/RTCP, SDP, DTMF (RFC 2833)
-- Optional native extensions: `bcg729`, `opus`, `psampler` (see below)
+- Linguagem: PHP (sem Composer neste repositório)
+- Framework/runtime: Corrotinas Swoole (extensão PECL)
+- Protocolos: SIP, RTP/RTCP, SDP, DTMF (RFC 2833)
+- Extensões nativas opcionais: `bcg729`, `opus`, `psampler` (veja abaixo)
 
-## Requirements
+## Requisitos
 
 - PHP 8.4+ (CLI)
-- PECL Swoole 6.0+ enabled: `php -m | grep swoole`
-- Linux/macOS recommended
-- Optional codec extensions for additional payloads (see Codecs section)
+- PECL Swoole 6.0+ habilitado: `php -m | grep swoole`
+- Linux/macOS recomendado
+- Extensões de codec opcionais para payloads adicionais (veja seção Codecs)
 
-Quick install (Swoole):
+Instalação rápida (Swoole):
 
 ```bash
 pecl install swoole
 php -m | grep swoole
 ```
 
-Optional extensions (install only if you need them):
+Extensões opcionais (instale apenas se precisar):
 
 ```bash
-# G.729 (optional)
+# G.729 (opcional)
 git clone https://github.com/berzersks/bcg729.git && cd bcg729
 phpize && ./configure && make && sudo make install
 echo "extension=bcg729.so" | sudo tee -a "$(php -r 'echo php_ini_loaded_file();')"
 
-# Opus (optional)
+# Opus (opcional)
 git clone https://github.com/berzersks/opus.git && cd opus
 phpize && ./configure && make && sudo make install
 echo "extension=opus.so" | sudo tee -a "$(php -r 'echo php_ini_loaded_file();')"
 
-# psampler (optional)
+# psampler (opcional)
 git clone https://github.com/berzersks/psampler.git && cd psampler
 phpize && ./configure && make && sudo make install
 echo "extension=psampler.so" | sudo tee -a "$(php -r 'echo php_ini_loaded_file();')"
 ```
 
-## Getting started
+## Começando
 
-The repository includes a runnable example at `example.php`.
+O repositório inclui um exemplo executável em `example.php`.
 
-Minimal example:
+Exemplo mínimo:
 
 ```php
 <?php
@@ -73,46 +73,46 @@ use libspech\Sip\trunkController;
 include 'plugins/autoloader.php';
 
 \Swoole\Coroutine\run(function () {
-    $username = 'your_username';
-    $password = 'your_password';
+    $username = 'seu_username';
+    $password = 'sua_password';
     $domain   = 'sip.example.com';
     $host     = gethostbyname($domain);
 
     $phone = new trunkController($username, $password, $host, 5060);
 
     if (!$phone->register(2)) {
-        throw new \Exception('Failed to register');
+        throw new \Exception('Falha no registro');
     }
 
-    // Offer a linear PCM line in SDP (optional)
+    // Oferecer uma linha PCM linear em SDP (opcional)
     $phone->mountLineCodecSDP('L16/8000');
 
     $phone->onRinging(function () {
-        echo "Ringing...\n";
+        echo "Tocando...\n";
     });
 
     $phone->onAnswer(function (trunkController $phone) {
-        echo "Answered. Receiving media...\n";
+        echo "Atendido. Recebendo mídia...\n";
         $phone->receiveMedia();
         \Swoole\Coroutine::sleep(10);
-        // Hang up after a while (BYE)
-        // See example.php for a full BYE send using sip/renderMessages
+        // Desligar depois de um tempo (BYE)
+        // Veja example.php para um envio completo de BYE usando sip/renderMessages
     });
 
     $phone->onReceiveAudio(function ($pcmData, $peer, trunkController $phone) {
-        $phone->bufferAudio .= $pcmData; // capture raw PCM
+        $phone->bufferAudio .= $pcmData; // capturar PCM bruto
     });
 
     $phone->onHangup(function (trunkController $phone) {
         $phone->saveBufferToWavFile('audio.wav', $phone->bufferAudio);
-        echo "Saved audio.wav\n";
+        echo "Salvou audio.wav\n";
     });
 
     $phone->call('5511999999999');
 });
 ```
 
-Run:
+Executar:
 
 ```bash
 php example.php
@@ -120,31 +120,31 @@ php example.php
 
 ## Scripts
 
-- There is no package manager or script runner in this repository. Use the PHP CLI directly.
-- Entry point for the demo is `example.php`.
+- Não há gerenciador de pacotes ou executor de scripts neste repositório. Use o PHP CLI diretamente.
+- Ponto de entrada para a demo é `example.php`.
 
-## Environment variables
+## Variáveis de Ambiente
 
-- No fixed environment variables are required by the library as committed.
-- TODO: document any runtime configuration that should be externalized (e.g., SIP credentials, proxies, NAT/public IP).
+- Nenhuma variável de ambiente fixa é necessária pela biblioteca conforme commitado.
+- TODO: documentar qualquer configuração de runtime que deve ser externalizada (ex.: credenciais SIP, proxies, IP público/NAT).
 
-## Project structure
+## Estrutura do Projeto
 
 ```
 libspech/
 ├── example.php
 ├── plugins/
-│   ├── autoloader.php                 # Simple autoloader driven by configInterface.json
-│   ├── configInterface.json           # Lists autoload directories
+│   ├── autoloader.php                 # Autoloader simples orientado por configInterface.json
+│   ├── configInterface.json           # Lista diretórios de autoload
 │   ├── Packet/
 │   │   └── controller/
-│   │       └── renderMessages.php     # SIP/SDP message rendering helpers
+│   │       └── renderMessages.php     # Auxiliares de renderização de mensagens SIP/SDP
 │   └── Utils/
 │       ├── cache/
 │       │   ├── cache.php
 │       │   └── rpcClient.php
-│       ├── cli/cli.php                # CLI helper utilities
-│       ├── libspech/trunkController.php  # Main call controller (namespace libspech\\Sip)
+│       ├── cli/cli.php                # Utilitários auxiliares CLI
+│       ├── libspech/trunkController.php  # Controlador principal de chamadas (namespace libspech\\Sip)
 │       ├── network/network.php
 │       └── sip/
 │           ├── AdaptiveBuffer.php
@@ -153,8 +153,8 @@ libspech/
 │           ├── rtpChannel.php
 │           ├── rtpc.php
 │           ├── sip.php
-│           └── trunkController.php    # Legacy/alt controller (kept for compatibility)
-├── stubs/                             # IDE stubs for optional extensions
+│           └── trunkController.php    # Controlador legado/alt (mantido para compatibilidade)
+├── stubs/                             # Stubs IDE para extensões opcionais
 │   ├── bcg729Channel.php
 │   ├── opusChannel.php
 │   └── psampler.php
@@ -163,42 +163,41 @@ libspech/
 └── SECURITY.md
 ```
 
-Note on namespaces: the class defined at `plugins/Utils/libspech/trunkController.php` uses the namespace `libspech\Sip`.
-Use statements in code should target `libspech\Sip\trunkController` as shown in the example.
+Nota sobre namespaces: a classe definida em `plugins/Utils/libspech/trunkController.php` usa o namespace `libspech\Sip`.
+Use statements no código devem direcionar `libspech\Sip\trunkController` como mostrado no exemplo.
 
 ## Codecs
 
-Supported/available payloads in the codebase:
+Payloads suportados/disponíveis no codebase:
 
-| Codec                  | Payload Type | Sample Rate | Status   | Notes/Extension                       |
-|------------------------|--------------|-------------|----------|---------------------------------------|
-| PCMU (G.711 µ-law)     | 0            | 8 kHz       | Built-in | No extra extension required           |
-| PCMA (G.711 A-law)     | 8            | 8 kHz       | Built-in | No extra extension required           |
-| G.729                  | 18           | 8 kHz       | Optional | `bcg729` PHP extension                |
-| Opus                   | 111          | 48 kHz      | Optional | `opus` PHP extension                  |
-| L16 (Linear PCM)       | 96           | 8 kHz       | Built-in | `psampler` recommended for resampling |
-| telephone-event (DTMF) | 101          | 8 kHz       | Built-in | RFC 2833 for DTMF signaling           |
+| Codec                  | Tipo de Payload | Taxa de Amostragem | Status   | Notas/Extensão                                  |
+|------------------------|-----------------|---------------------|----------|-------------------------------------------------|
+| PCMU (G.711 µ-law)     | 0               | 8 kHz               | Integrado | Nenhuma extensão extra necessária               |
+| PCMA (G.711 A-law)     | 8               | 8 kHz               | Integrado | Nenhuma extensão extra necessária               |
+| G.729                  | 18              | 8 kHz               | Opcional | Extensão PHP `bcg729` (baseado no Belladone BCG729) |
+| Opus                   | 111             | 48 kHz              | Opcional | Extensão PHP `opus`                            |
+| L16 (Linear PCM)       | 96              | 8 kHz               | Integrado | `psampler` recomendado para reamostragem       |
+| telephone-event (DTMF) | 101             | 8 kHz               | Integrado | RFC 2833 para sinalização DTMF                 |
 
-Notes:
+Notas:
 
-- Multiple codecs can be offered via SDP. Use `mountLineCodecSDP()` to adjust preferences.
-- Some payload type values may vary depending on negotiation; verify with your provider.
+- Múltiplos codecs podem ser oferecidos via SDP. Use `mountLineCodecSDP()` para ajustar preferências.
+- Alguns valores de tipo de payload podem variar dependendo da negociação; verifique com seu provedor.
 
-## Usage notes
+## Notas de Uso
 
-- Networking/NAT: ensure the local IP and ports the library binds to are reachable by the SIP peer. STUN/NAT traversal
-  is not included. TODO: document any helper utilities or best practices for NAT environments.
-- Security: this library focuses on basic SIP over UDP. TLS/SRTP are not documented here. TODO: clarify TLS/SRTP support
-  status.
+- Rede/NAT: certifique-se de que o IP local e portas que a biblioteca vincula sejam alcançáveis pelo peer SIP. STUN/travessia NAT
+  não está incluída. TODO: documentar utilitários auxiliares ou melhores práticas para ambientes NAT.
+- Segurança: esta biblioteca foca no SIP básico sobre UDP. TLS/SRTP não estão documentados aqui. TODO: esclarecer status de suporte TLS/SRTP.
 
-## Tests
+## Testes
 
-- There are no automated tests in the repository at this time.
-- TODO: add unit/integration tests for SIP message parsing, RTP timing, DTMF, and example call flows.
+- Não há testes automatizados no repositório no momento.
+- TODO: adicionar testes unitários/integração para parsing de mensagens SIP, timing RTP, DTMF e fluxos de chamadas de exemplo.
 
-## License
+## Licença
 
-This project is licensed under the MIT License. See `LICENSE` for details.
+Este projeto está licenciado sob a Licença MIT. Veja `LICENSE` para detalhes.
 
-Third-party components may be under different licenses (Swoole, codec extensions). Review their LICENSE files before use
-in production.
+Componentes de terceiros podem estar sob licenças diferentes (Swoole, extensões de codec). Revise seus arquivos LICENSE antes de usar
+em produção.
