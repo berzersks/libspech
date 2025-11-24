@@ -5,6 +5,7 @@ namespace libspech\Rtp;
 use bcg729Channel;
 use Closure;
 use InvalidArgumentException;
+use opusChannel;
 use RuntimeException;
 
 class rtpChannel
@@ -43,6 +44,7 @@ class rtpChannel
         }
 
     }
+    public opusChannel $opusChannel;
 
     public function __construct(int $payloadType = self::PAYLOAD_PCMU, int $sampleRate = 8000, int $packetTimeMs = 20, ?int $ssrc = null)
     {
@@ -50,6 +52,12 @@ class rtpChannel
         $this->validateSampleRate($sampleRate);
         $this->validatePacketTime($packetTimeMs);
         $this->bcg729Channel = new bcg729Channel;
+        $opus = new opusChannel($sampleRate, 1);
+        $opus->setBitrate(24000);
+        $opus->setSignalVoice(true);
+        $opus->setDTX(true);
+        $this->opusChannel = $opus;
+
 
         $this->payloadType = $payloadType;
         $this->sampleRate = $sampleRate;
@@ -330,7 +338,7 @@ class rtpChannel
         if ($delta <= 0) return 160; // Mínimo de 20ms para 8kHz
 
         // Conversão correta: mantém a proporção do sample rate
-        $durationIn8kHz = intval($delta *   $this->sampleRate);
+        $durationIn8kHz = intval($delta * $this->sampleRate);
         // return max(160, $durationIn8kHz); // Mínimo de 160 amostras (20ms em 8kHz)
         return 320;
     }

@@ -358,11 +358,16 @@ class MediaChannel
                         cli::pcl("TIMEOUT: no members to send silence to", 'bold_red');
                         continue;
                     }
-                    $buffer = $this->members[$expectedMember]['rtpChannel']->buildAudioPacket(str_repeat("\x00\x00", 160));
-                    $this->socket->sendto($expectedMember, $this->members[$expectedMember]['port'], $buffer);
+                    $buffer = $this->members[$expectedMember]['rtpChannel']->buildAudioPacket(str_repeat("\x00", 160));
+                    $this->socket->sendto($expectedMember, $this->members[$expectedMember]['port'] + 1, $buffer);
+                    $packet = $this->socket->recvfrom($peer, 0.2);
+                    if (!$packet) {
+                        cli::pcl("TIMEOUT: no packet to send silence to", 'bold_red');
+                        continue;
+                    }
+
                     cli::pcl("TIMEOUT: sending silence to {$expectedMember}", 'bold_red');
-                    Coroutine::sleep(0.5);
-                    continue;
+
                 }
 
 
@@ -486,7 +491,7 @@ class MediaChannel
                             $encode = encodePcmToPcma($pcmData);
                             break;
                         case 'G729':
-                            if ($frequencyMember !== 8000) $pcmData = resampler($pcmData, $frequencyPacket, 8000);
+                            if ($frequencyPacket !== 8000) $pcmData = resampler($pcmData, $frequencyPacket, 8000);
                             $encode = $this->channelEncode->encode($pcmData);
                             break;
                         case 'OPUS':
@@ -545,6 +550,7 @@ class MediaChannel
         $opus = new opusChannel(48000, 1);
 
 
+
         $peer['opus'] = $opus;
 
 
@@ -559,13 +565,13 @@ class MediaChannel
                 } elseif (!empty($peer['config']['maxplaybackrate'])) {
                     $rate = 'Max. Playback Rate: ' . $peer['config']['maxplaybackrate'] . ' ';
                     $opus->setBitrate((int)$peer['config']['maxplaybackrate']);
-                } else $opus->setBitrate(8000);
+                } else $opus->setBitrate(64000);
 
 
                 $config = $peer['config'];
                 if (!empty($config['userdtx'])) $opus->setDTX(true);
                 if (!empty($config['cbr'])) $opus->setVBR(true);
-                $opus->setComplexity(6);
+                $opus->setComplexity(8);
                 $opus->setSignalVoice(true);
 
 

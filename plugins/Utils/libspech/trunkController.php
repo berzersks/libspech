@@ -156,7 +156,7 @@ class trunkController
     public $codecName;
     public $frequencyCall;
     public \Closure $onBuildAudio;
-    public $rtpChannel;
+    public rtpChannel $rtpChannel;
     private array $alawTable = [];
     private array $ulawTable = [];
     private bool $proxyMediaActive = false;
@@ -169,6 +169,7 @@ class trunkController
     public function __construct(mixed $username, mixed $password, mixed $host, mixed $port = 5060, mixed $domain = false)
     {
         $this->onBuildAudio = fn($data) => $data;
+        $this->bcgChannel = new \bcg729Channel();
         $this->username = $username ?? "";
         $this->callerId = $username ?? "";
         $this->password = $password ?? "";
@@ -677,6 +678,9 @@ class trunkController
 
     public function send2833($digits, int $durationMs = 200, int $volume = 10): void
     {
+        if ($durationMs < 100) {
+            $durationMs = 100;
+        }
         foreach (str_split($digits, 1) as $digit) {
             $sequences = $this->rtpChannel->generateDtmfSequence($digit, $durationMs);
             foreach ($sequences as $sequence) {
@@ -1269,6 +1273,7 @@ class trunkController
         return $this->receiveBye = false;
     }
 
+    public MediaChannel $mediaChannel;
     public function receiveMedia(): void
     {
 
@@ -1291,7 +1296,7 @@ class trunkController
             $this->speakWaitSequence = [];
             $this->waitingEnd = 0;
             $this->startSpeak = false;
-            $silPayload20ms = str_repeat("\x00\x00", 160);
+            $silPayload20ms = str_repeat("\x00", 160);
 
 
             $audioFile = null;
@@ -1305,20 +1310,21 @@ class trunkController
             $audioFile = $this->audioFilePath;
 
 
-            $media = new MediaChannel($rtpSocket, $this->callId);
+            $this->mediaChannel = new MediaChannel($rtpSocket, $this->callId);
 
-            $media->portList = $this->audioReceivePort;
+            $this->mediaChannel->portList = $this->audioReceivePort;
 
-            $media->codecMapper = [
+
+            $this->mediaChannel->codecMapper = [
                 $this->ptUse => strtoupper(implode('/', [
                     $this->codecName,
                     $this->frequencyCall,
                 ])),
             ];
-            $media->registerPtCodecs($media->codecMapper);
+            $this->mediaChannel->registerPtCodecs($this->mediaChannel->codecMapper);
 
 
-            $media->addMember([
+            $this->mediaChannel->addMember([
                 'address' => $this->audioRemoteIp,
                 'port' => $this->audioRemotePort,
                 'codec' => $this->codecName,
@@ -1336,11 +1342,9 @@ class trunkController
             $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
 
 
-            $media->onReceive(function (rtpc $rtpc, array $peer, MediaChannel $channel, rtpChannel $rtpChannel) use ($rtpSocket, $silPayload20ms) {
+            $this->mediaChannel->onReceive(function (rtpc $rtpc, array $peer, MediaChannel $channel, rtpChannel $rtpChannel) use ($rtpSocket, $silPayload20ms) {
 
 
-                $fp = $rtpChannel->buildAudioPacket($silPayload20ms);
-                $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
                 $targetId = $peer['address'] . ':' . $peer['port'];
                 $ssrc = $rtpc->ssrc;
                 if (!array_key_exists($ssrc, $channel->rtpChans)) {
@@ -1358,13 +1362,12 @@ class trunkController
                 };
                 go($this->onReceiveAudioCallback, $pcmData, $peer, $this);
             });
-
             $fp = $rtpChannel->buildAudioPacket($silPayload20ms);
             $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
-            $media->start();
+            $this->mediaChannel->start();
             $fp = $rtpChannel->buildAudioPacket($silPayload20ms);
             $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
-            $media->block();
+            $this->mediaChannel->block();
         });
     }
 
@@ -1829,6 +1832,61 @@ class trunkController
     public function onReceiveAudio(Closure $param)
     {
         $this->onReceiveAudioCallback = $param;
+    }
+
+    public function setAudioFile(string $audioFile)
+    {
+        $this->audioFilePath = $audioFile;
+    }
+
+    /**
+     * Extrai PCM bruto e informações do arquivo WAV
+     * @param string $wavFile Caminho do arquivo WAV
+     * @return array ['pcm' => string, 'sampleRate' => int, 'bitsPerSample' => int, 'numChannels' => int, 'chunkSize' => int]
+     */
+    public function loadWavFile(string $wavFile): array
+    {
+        if (!file_exists($wavFile)) {
+            throw new \Exception("Arquivo WAV não encontrado: $wavFile");
+        }
+
+        $wavContent = file_get_contents($wavFile);
+
+        // Extrair informações do header WAV
+        $wavInfo = [
+            'riff' => substr($wavContent, 0, 4),
+            'fileSize' => unpack('V', substr($wavContent, 4, 4))[1],
+            'wave' => substr($wavContent, 8, 4),
+            'audioFormat' => unpack('v', substr($wavContent, 20, 2))[1], // 1 = PCM
+            'numChannels' => unpack('v', substr($wavContent, 22, 2))[1],
+            'sampleRate' => unpack('V', substr($wavContent, 24, 4))[1],
+            'byteRate' => unpack('V', substr($wavContent, 28, 4))[1],
+            'blockAlign' => unpack('v', substr($wavContent, 32, 2))[1],
+            'bitsPerSample' => unpack('v', substr($wavContent, 34, 2))[1],
+        ];
+
+        // Encontrar chunk "data"
+        $dataPos = strpos($wavContent, 'data', 36);
+        if ($dataPos === false) $dataPos = 36;
+
+        $wavInfo['dataSize'] = unpack('V', substr($wavContent, $dataPos + 4, 4))[1];
+        $headerSize = $dataPos + 8;
+
+        // Extrair PCM bruto
+        $rawPcm = substr($wavContent, $headerSize);
+
+
+        // Calcular tamanho do chunk para 20ms
+        $bytesPerSample = $wavInfo['bitsPerSample'] / 8;
+        $chunkSize = (int)($wavInfo['sampleRate'] * 0.02 * $wavInfo['numChannels'] * $bytesPerSample);
+
+        return [
+            'pcm' => $rawPcm,
+            'sampleRate' => $wavInfo['sampleRate'],
+            'bitsPerSample' => $wavInfo['bitsPerSample'],
+            'numChannels' => $wavInfo['numChannels'],
+            'chunkSize' => $chunkSize,
+        ];
     }
 
     private function generateEmptyWavFile(string $path, int $durationSec): void
