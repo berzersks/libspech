@@ -1274,6 +1274,7 @@ class trunkController
     }
 
     public MediaChannel $mediaChannel;
+
     public function receiveMedia(): void
     {
 
@@ -1311,8 +1312,8 @@ class trunkController
 
 
             $this->mediaChannel = new MediaChannel($rtpSocket, $this->callId);
-
             $this->mediaChannel->portList = $this->audioReceivePort;
+            $this->mediaChannel->onDtmfCallable = $this->onDtmfCallable;
 
 
             $this->mediaChannel->codecMapper = [
@@ -1369,6 +1370,13 @@ class trunkController
             $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
             $this->mediaChannel->block();
         });
+    }
+
+    public ?Closure $onDtmfCallable;
+
+    public function onKeyPress(callable $callback): void
+    {
+        $this->onDtmfCallable = $callback;
     }
 
     public function addMember(string $username): void

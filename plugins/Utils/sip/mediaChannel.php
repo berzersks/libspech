@@ -431,9 +431,11 @@ class MediaChannel
                     $this->forwardDtmfToMembers($rtpc, $peer, $idFrom, $destinationChannels);
 
                     // Processar o evento DTMF (detectar digit, callbacks, etc)
+                    // O callback onDtmfCallable será disparado apenas 1x quando o evento terminar
                     $this->processDtmf($rtpc, $peer, function () {
                         // Callback vazio - o forward já foi feito acima
                     });
+
                     continue;
                 }
 
@@ -496,12 +498,7 @@ class MediaChannel
                             break;
                         case 'OPUS':
                             $pcm48_mono = $this->members[$targetId]['opus']->resample($pcmData, $frequencyPacket, 48000);
-                            // som espacial
-
-
                             $encode = $this->members[$targetId]['opus']->encode($pcm48_mono, 48000);
-
-
                             break;
                         case 'L16':
                             $encode = resampler($pcmData, $frequencyPacket, $frequencyMember, true);
@@ -548,7 +545,6 @@ class MediaChannel
     public function addMember(array $peer): void
     {
         $opus = new opusChannel(48000, 1);
-
 
 
         $peer['opus'] = $opus;
@@ -673,7 +669,9 @@ class MediaChannel
     {
         foreach ($this->members as $targetId => $info) {
             // Não enviar para si mesmo
-            if ($targetId === $idFrom) continue;
+            if ($targetId === $idFrom) {
+                continue;
+            }
 
             // Não reenviar para o SSRC de origem
             if (array_key_exists('ssrc', $info) && $rtpc->ssrc == $info['ssrc']) {
@@ -703,6 +701,7 @@ class MediaChannel
 
             // Detectar se é o primeiro pacote do evento (marker bit)
             $isFirstPacket = ($rtpc->marker === 1);
+
 
             // Construir e enviar pacote DTMF preservando timestamp original
             $outPacket = $destChannel['rtpChannel']->buildDtmfForwardPacket(
@@ -842,6 +841,15 @@ class MediaChannel
             $volume = $flags & 0x3F; // 6 bits de volume
             $duration = $data['duration'];
 
+
+            if ($duration < 200) {
+                $callback = $this->onDtmfCallable;
+                if (is_callable($callback)) {
+                    go($callback, $event, $peer);
+                }
+            }
+
+
             // Criar chave única para este evento específico
             $cacheKey = "{$ssrc}:{$timestamp}:{$event}";
 
@@ -876,16 +884,19 @@ class MediaChannel
                 ];
             }
 
+
             // Forward para outros membros (sempre, para manter sincronização)
             $closure();
 
             // Processar apenas quando flag E (End) está setada
             if (!$isEnd) {
+
                 return;
             }
 
             // Verificar se já processamos este evento
             if ($this->dtmfPacketCache[$cacheKey]['processed']) {
+
                 return;
             }
 
@@ -921,7 +932,10 @@ class MediaChannel
             ];
 
             // Traduzir evento para dígito
-            $digit = traduzDTMF($event);
+            $digit = $this->translateDigit($event);
+
+
+
 
             // Ajustar timestamps dos membros para compensar duração do DTMF
             // RFC 4733: duration está em unidades de timestamp (samples)
@@ -939,9 +953,6 @@ class MediaChannel
             }
 
             // Disparar callback de DTMF
-            if (is_callable($this->onDtmfCallable)) {
-                go($this->onDtmfCallable, $digit, $peer, $event, $this);
-            }
 
             // Limpar cache antigo (> 5 segundos)
             $currentTime = microtime(true);
@@ -951,5 +962,24 @@ class MediaChannel
                 }
             }
         });
+    }
+
+    private function translateDigit(mixed $event): string
+    {
+        $mapa = [
+            0 => '0',
+            1 => '1',
+            2 => '2',
+            3 => '3',
+            4 => '4',
+            5 => '5',
+            6 => '6',
+            7 => '7',
+            8 => '8',
+            9 => '9',
+            10 => '*',
+            11 => '#',
+        ];
+        return $mapa[$event] ?? '';
     }
 }
