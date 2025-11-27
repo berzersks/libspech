@@ -1463,6 +1463,7 @@ class trunkController
                 $this->mediaChannel->unblock();
                 $this->mediaChannel->close();
             } catch (\Throwable $e) {
+
                 // Ignora erros
             }
         }
