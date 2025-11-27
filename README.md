@@ -4,7 +4,6 @@
 [![Swoole](https://img.shields.io/badge/Swoole-6.0+-green.svg)](https://www.swoole.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-
 Real-time SIP/RTP VoIP library for PHP using Swoole coroutines. Place and receive calls from PHP, stream RTP audio,
 handle DTMF, and record audio.
 
