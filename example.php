@@ -33,7 +33,7 @@ include 'plugins/autoloader.php';
     });
     $phone->onHangup(function (trunkController $phone) use (&$audioBuffer) {
         cli::pcl("Chamada finalizada", "red");
-        $phone->close();
+
     });
 
     $phone->mountLineCodecSDP('G729/8000');
