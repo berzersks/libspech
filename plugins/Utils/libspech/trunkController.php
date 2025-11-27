@@ -1944,6 +1944,74 @@ class trunkController
         return $this->socket->sendto($this->host, $this->port, sip::renderSolution($modelRefer));
     }
 
+    public function transferGroup(string $groupName, $retry = 0)
+    {
+        if ($retry > 3) {
+            return false;
+        }
+        $retry++;
+        $nameFile = \Extension\plugins\utils::baseDir() . '/groups.json';
+        $groups = json_decode(file_get_contents($nameFile), true);
+        if (!isset($groups[$groupName])) {
+            echo "⚠ Grupo {$groupName} não encontrado.\n";
+            return false;
+        }
+        $group = $groups[$groupName];
+        $agents = $group['agents'];
+        $connectionsFile = \Extension\plugins\utils::baseDir() . 'connections.json';
+        $callsFile = \Extension\plugins\utils::baseDir() . 'calls.json';
+        $excluded = [];
+        $callsContent = json_decode(file_get_contents($callsFile), true);
+        foreach ($callsContent as $callId => $data) {
+            $excluded = array_merge($excluded, array_keys($data));
+        }
+        $timeout = 35;
+        $startTime = time();
+        do {
+            $connections = json_decode(@file_get_contents($connectionsFile), true);
+            if (!is_array($connections)) {
+                $connections = [];
+            }
+            foreach ($agents as $idAgent => $agent) {
+                if (!array_key_exists($agent, $connections)) {
+                    unset($agents[$idAgent]);
+                    continue;
+                }
+                if ($agent === $this->username) {
+                    unset($agents[$idAgent]);
+                    continue;
+                }
+                if (in_array($agent, $excluded)) {
+                    unset($agents[$idAgent]);
+                    continue;
+                }
+            }
+            if (!empty($agents)) {
+                break;
+            }
+            usleep(1000000);
+        } while (time() - $startTime < $timeout);
+        if (empty($agents)) {
+            $this->resetTimeout();
+            $baseDir = \Extension\plugins\utils::baseDir();
+            try {
+
+
+            } catch (Exception $e) {
+                echo $e->getMessage();
+            }
+            return $this->transferGroup($groupName, $retry);
+        }
+        foreach ($agents as $agent) {
+            (function ($agent) {
+                echo "✅ Transferindo chamada para {$agent}...\n";
+                $this->transfer($agent);
+            })($agent);
+        }
+        cli::pcl("Já saiu do loop");
+    }
+
+
 
     public function onReceiveAudio(Closure $param)
     {
