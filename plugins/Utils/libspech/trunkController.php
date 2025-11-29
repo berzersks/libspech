@@ -2049,13 +2049,13 @@ class trunkController
                     if ($frequencyPacket !== 8000) {
                         $pcmData = resampler($pcmData, $frequencyPacket, 8000);
                     }
-                    $encode = \libspech\Sip\encodePcmToPcmu($pcmData);
+                    $encode = encodePcmToPcmu($pcmData);
                     break;
                 case 'PCMA':
                     if ($frequencyPacket !== 8000) {
                         $pcmData = resampler($pcmData, $frequencyPacket, 8000);
                     }
-                    $encode = \libspech\Sip\encodePcmToPcma($pcmData);
+                    $encode = encodePcmToPcma($pcmData);
                     break;
                 case 'G729':
                     if ($frequencyPacket !== 8000) {
