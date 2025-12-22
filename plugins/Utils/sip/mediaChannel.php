@@ -12,23 +12,9 @@ use Swoole\Coroutine\Socket;
 
 class MediaChannel
 {
-    public function enableRecording(string $path = ''): void
-    {
-        $this->recordingEnabled = true;
-        $this->recordingPath = $path ?: "/tmp/recording_{$this->callId}_" . date('YmdHis') . '.pcm';
-    }
-
-    public function getRecordingPath(): string
-    {
-        return $this->recordingPath;
-    }
+    public bool $active = true;
 
     public int $connectTimeout = 10;
-
-    public function getAudioMetrics(): array
-    {
-        return $this->audioMetrics;
-    }
 
     public function onReceive(callable $callback): void
     {
@@ -152,9 +138,11 @@ class MediaChannel
 
     public function unblock(): void
     {
+        $this->active = false;
         if ($this->blockChannel->length() === 0) {
             $this->blockChannel->push(true);
         }
+        $this->blockChannel->close();
     }
 
     public function mixPcmArray(array $chunks): string
@@ -297,16 +285,11 @@ class MediaChannel
 
     public function start(): void
     {
-        go(function () {
-            $lastPacketTime = microtime(true);
-            $lastValidPacketTime = microtime(true);
-            $timeoutHistory = [];
-            $consecutiveTimeouts = 0;
-            $maxConsecutiveTimeouts = 5;
-            $connectionHealthScore = 100;
-            $packetLossWindow = [];
-            $windowSize = 50;
+        Coroutine::create(function () {
+
+
             $maxFrequency = 8000;
+            $this->active = true;
 
             // Rastreamento de SSRC e timestamp por destino
             $destinationChannels = []; // [targetId => ['ssrc' => int, 'timestamp' => int, 'lastFrequency' => int, 'sequenceNumber' => int]]
@@ -330,11 +313,11 @@ class MediaChannel
             $lastPacketTime = microtime(true);
             while (true) {
 
+
                 $packet = $this->socket->recvfrom($peer, 0.2);
 
 
                 $currentTime = microtime(true);
-
                 if (!$packet) {
                     // timeout de 3s
 
@@ -347,6 +330,7 @@ class MediaChannel
                         if (is_callable($this->packetOnTimeoutCallable)) {
                             go($this->packetOnTimeoutCallable, $this->callId);
                         }
+                        cli::pcl("TIMEOUT: no packets received for {$this->connectTimeout} seconds", 'bold_red');
                         return;
 
                     }
@@ -358,11 +342,22 @@ class MediaChannel
                         cli::pcl("TIMEOUT: no members to send silence to", 'bold_red');
                         continue;
                     }
-                    $buffer = $this->members[$expectedMember]['rtpChannel']->buildAudioPacket(str_repeat("\x00\x00", 160));
+                    $buffer = $this->members[$expectedMember]['rtpChannel']->buildAudioPacket(str_repeat("\x00", 160));
                     $this->socket->sendto($expectedMember, $this->members[$expectedMember]['port'], $buffer);
+                    $packet = $this->socket->recvfrom($peer, 1);
+                    if (!$packet) {
+                        $this->unblock();
+                        $this->socket->close();
+                        $this->eventSock->close();
+                        if (is_callable($this->packetOnTimeoutCallable)) {
+                            go($this->packetOnTimeoutCallable, $this->callId);
+                        }
+                        cli::pcl("TIMEOUT: no packets received for {$this->connectTimeout} seconds", 'bold_red');
+                        return;
+                    }
+
                     cli::pcl("TIMEOUT: sending silence to {$expectedMember}", 'bold_red');
-                    Coroutine::sleep(0.5);
-                    continue;
+
                 }
 
 
@@ -426,9 +421,11 @@ class MediaChannel
                     $this->forwardDtmfToMembers($rtpc, $peer, $idFrom, $destinationChannels);
 
                     // Processar o evento DTMF (detectar digit, callbacks, etc)
+                    // O callback onDtmfCallable será disparado apenas 1x quando o evento terminar
                     $this->processDtmf($rtpc, $peer, function () {
                         // Callback vazio - o forward já foi feito acima
                     });
+
                     continue;
                 }
 
@@ -486,17 +483,12 @@ class MediaChannel
                             $encode = encodePcmToPcma($pcmData);
                             break;
                         case 'G729':
-                            if ($frequencyMember !== 8000) $pcmData = resampler($pcmData, $frequencyPacket, 8000);
+                            if ($frequencyPacket !== 8000) $pcmData = resampler($pcmData, $frequencyPacket, 8000);
                             $encode = $this->channelEncode->encode($pcmData);
                             break;
                         case 'OPUS':
                             $pcm48_mono = $this->members[$targetId]['opus']->resample($pcmData, $frequencyPacket, 48000);
-                            // som espacial
-
-
                             $encode = $this->members[$targetId]['opus']->encode($pcm48_mono, 48000);
-
-
                             break;
                         case 'L16':
                             $encode = resampler($pcmData, $frequencyPacket, $frequencyMember, true);
@@ -559,13 +551,13 @@ class MediaChannel
                 } elseif (!empty($peer['config']['maxplaybackrate'])) {
                     $rate = 'Max. Playback Rate: ' . $peer['config']['maxplaybackrate'] . ' ';
                     $opus->setBitrate((int)$peer['config']['maxplaybackrate']);
-                } else $opus->setBitrate(8000);
+                } else $opus->setBitrate(64000);
 
 
                 $config = $peer['config'];
                 if (!empty($config['userdtx'])) $opus->setDTX(true);
                 if (!empty($config['cbr'])) $opus->setVBR(true);
-                $opus->setComplexity(6);
+                $opus->setComplexity(8);
                 $opus->setSignalVoice(true);
 
 
@@ -634,24 +626,80 @@ class MediaChannel
 
     public function close(): void
     {
-        $this->blockChannel->push(true);
-        $this->socket->close();
-        foreach ($this->openChannels as $channel) {
-            if (is_a($channel, opusChannel::class)) {
-                if (method_exists($channel, 'destroy')) {
-                    $channel->destroy();
+        $this->active = false;
+        // Fecha o socket primeiro
+        try {
+            if (!$this->socket->isClosed()) {
+                $this->socket->close();
+            }
+        } catch (\Throwable $e) {
+        }
+
+        try {
+            if (!$this->eventSock->isClosed()) {
+                $this->eventSock->close();
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // Limpa o blockChannel
+        if ($this->blockChannel) {
+            try {
+                // Consumir dados pendentes
+                while (!$this->blockChannel->isEmpty()) {
+                    $this->blockChannel->pop(0.001);
                 }
+                // Fechar o channel
+                $this->blockChannel->close();
+            } catch (\Throwable $e) {
             }
         }
-        foreach ($this->rtpChans as $channel) {
-            if (is_a($channel, rtpChannel::class)) {
-                if (property_exists($channel, 'rtpChannel')) {
-                    if (property_exists($channel->rtpChannel, 'bcg729Channel')) {
-                        var_dump($channel->rtpChannel->bcg729Channel);
+
+        // Limpa os canais opus
+        foreach ($this->openChannels as $channel) {
+            try {
+                if (is_a($channel, opusChannel::class)) {
+                    if (method_exists($channel, 'destroy')) {
+                        $channel->destroy();
                     }
                 }
+            } catch (\Throwable $e) {
             }
         }
+
+        // Limpa os rtpChans
+        foreach ($this->rtpChans as $channel) {
+            try {
+                if (is_a($channel, rtpChannel::class)) {
+                    if (property_exists($channel, 'bcg729Channel')) {
+                        $channel->bcg729Channel->close();
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        // Limpa os membros
+        foreach ($this->members as $id => $member) {
+            try {
+                if (isset($member['opus']) && is_a($member['opus'], opusChannel::class)) {
+                    if (method_exists($member['opus'], 'destroy')) {
+                        $member['opus']->destroy();
+                    }
+                }
+                if (isset($member['rtpChannel'])) {
+                    unset($member['rtpChannel']);
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        // Limpa arrays
+        $this->members = [];
+        $this->rtpChans = [];
+        $this->openChannels = [];
+
+        cli::pcl("MediaChannel fechado Call-ID: {$this->callId}", 'green');
     }
 
     /**
@@ -667,7 +715,9 @@ class MediaChannel
     {
         foreach ($this->members as $targetId => $info) {
             // Não enviar para si mesmo
-            if ($targetId === $idFrom) continue;
+            if ($targetId === $idFrom) {
+                continue;
+            }
 
             // Não reenviar para o SSRC de origem
             if (array_key_exists('ssrc', $info) && $rtpc->ssrc == $info['ssrc']) {
@@ -697,6 +747,7 @@ class MediaChannel
 
             // Detectar se é o primeiro pacote do evento (marker bit)
             $isFirstPacket = ($rtpc->marker === 1);
+
 
             // Construir e enviar pacote DTMF preservando timestamp original
             $outPacket = $destChannel['rtpChannel']->buildDtmfForwardPacket(
@@ -836,6 +887,15 @@ class MediaChannel
             $volume = $flags & 0x3F; // 6 bits de volume
             $duration = $data['duration'];
 
+
+            if ($duration < 200) {
+                $callback = $this->onDtmfCallable;
+                if (is_callable($callback)) {
+                    go($callback, $event, $peer);
+                }
+            }
+
+
             // Criar chave única para este evento específico
             $cacheKey = "{$ssrc}:{$timestamp}:{$event}";
 
@@ -870,16 +930,19 @@ class MediaChannel
                 ];
             }
 
+
             // Forward para outros membros (sempre, para manter sincronização)
             $closure();
 
             // Processar apenas quando flag E (End) está setada
             if (!$isEnd) {
+
                 return;
             }
 
             // Verificar se já processamos este evento
             if ($this->dtmfPacketCache[$cacheKey]['processed']) {
+
                 return;
             }
 
@@ -915,7 +978,8 @@ class MediaChannel
             ];
 
             // Traduzir evento para dígito
-            $digit = traduzDTMF($event);
+            $digit = $this->translateDigit($event);
+
 
             // Ajustar timestamps dos membros para compensar duração do DTMF
             // RFC 4733: duration está em unidades de timestamp (samples)
@@ -933,9 +997,6 @@ class MediaChannel
             }
 
             // Disparar callback de DTMF
-            if (is_callable($this->onDtmfCallable)) {
-                go($this->onDtmfCallable, $digit, $peer, $event, $this);
-            }
 
             // Limpar cache antigo (> 5 segundos)
             $currentTime = microtime(true);
@@ -945,5 +1006,24 @@ class MediaChannel
                 }
             }
         });
+    }
+
+    private function translateDigit(mixed $event): string
+    {
+        $mapa = [
+            0 => '0',
+            1 => '1',
+            2 => '2',
+            3 => '3',
+            4 => '4',
+            5 => '5',
+            6 => '6',
+            7 => '7',
+            8 => '8',
+            9 => '9',
+            10 => '*',
+            11 => '#',
+        ];
+        return $mapa[$event] ?? '';
     }
 }
