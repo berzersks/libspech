@@ -1,4 +1,14 @@
 <?php
+/**
+ * libspech - Real-time SIP/RTP VoIP Library for PHP
+ *
+ * Copyright (c) 2025 Lotus / berzersks
+ * Website: https://spechshop.com
+ * All Rights Reserved.
+ *
+ * PROPRIETARY SOFTWARE - Unauthorized use is prohibited.
+ * Please respect the creator. See LICENSE for terms.
+ */
 
 namespace libspech\Sip;
 
@@ -1342,11 +1352,38 @@ class trunkController
             $this->rtpChannel = $rtpChannel;
             $fp = $rtpChannel->buildAudioPacket($silPayload20ms);
             $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
+            if ($this->audioFilePath) {
+                $audioFile = $this->audioFilePath;
+                if (file_exists($audioFile)) {
+                    $audioData = file_get_contents($audioFile);
+                }
+            }
 
 
-            $this->mediaChannel->onReceive(function (rtpc $rtpc, array $peer, MediaChannel $channel, rtpChannel $rtpChannel) use ($rtpSocket, $silPayload20ms) {
+            $audioPosition = 44;
+            $media->onReceive(function (rtpc $rtpc, array $peer, MediaChannel $channel, rtpChannel $rtpChannel) use (&$audioPosition, &$audioData, $rtpSocket, $silPayload20ms) {
+                $pcmDataLocal = $silPayload20ms;
 
+                // Se temos dados de áudio WAV disponíveis
+                if ($audioData && strlen($audioData) > 44) {
+                    // Verifica se chegamos ao fim do arquivo
+                    if ($audioPosition >= strlen($audioData)) {
+                        $audioPosition = 44; // Volta para o início (após o header WAV)
+                    }
 
+                    // Extrai 320 bytes de áudio PCM (20ms a 8kHz, 16-bit)
+                    $pcmDataLocal = substr($audioData, $audioPosition, 320);
+
+                    // Se não conseguiu ler 320 bytes (fim do arquivo), completa com silêncio
+                    if (strlen($pcmDataLocal) < 320) {
+                        $pcmDataLocal = str_pad($pcmDataLocal, 320, "\x00");
+                    }
+
+                    $audioPosition += 320;
+                }
+
+                $fp = $rtpChannel->buildAudioPacket($pcmDataLocal);
+                $rtpSocket->sendto($this->audioRemoteIp, $this->audioRemotePort, $fp);
                 $targetId = $peer['address'] . ':' . $peer['port'];
                 $ssrc = $rtpc->ssrc;
                 if (!array_key_exists($ssrc, $channel->rtpChans)) {

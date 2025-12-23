@@ -1,2 +1,27 @@
 /.idea/*
 .idea
+
+# Sensitive files
+.env
+.env.*
+!.env.example
+config/credentials.*
+credentials.*
+*_credentials.*
+secrets.*
+*.key
+*.pem
+*.p12
+*.pfx
+auth.json
+auth.php
+
+# Audio files
+*.wav
+*.mp3
+*.ogg
+audio.wav
+
+# Logs
+*.log
+logs/
