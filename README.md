@@ -340,6 +340,24 @@ libspech/
 │   ├── bcg729Channel.php              # Extensão bcg729 (G.729 codec)
 │   ├── opusChannel.php                # Extensão opus (Opus codec)
 │   └── psampler.php                   # Extensão psampler (reamostragem de áudio)
+│       ├── cache/
+│       │   ├── cache.php
+│       │   └── rpcClient.php
+│       ├── cli/cli.php                # Utilitários auxiliares CLI
+│       ├── libspech/trunkController.php  # Controlador principal de chamadas (namespace libspech\\Sip)
+│       ├── network/network.php
+│       └── sip/
+│           ├── AdaptiveBuffer.php
+│           ├── DtmfEvent.php
+│           ├── mediaChannel.php
+│           ├── rtpChannel.php
+│           ├── rtpc.php
+│           ├── sip.php
+│           └── trunkController.php    # Controlador legado/alt (mantido para compatibilidade)
+├── stubs/                             # Stubs IDE para extensões opcionais
+│   ├── bcg729Channel.php
+│   ├── opusChannel.php
+│   └── psampler.php
 ├── LICENSE.txt
 ├── README.md
 └── SECURITY.md
@@ -859,6 +877,29 @@ This project is licensed under the **Apache License 2.0**.
 **Copyright © 2025 Lotus / berzersks**
 **Website: [https://spechshop.com](https://spechshop.com)**
 **Official Repository: [https://github.com/spechshop/libspech](https://github.com/spechshop/libspech)**
+
+### Important Notice to the Community
+
+This is **open source software**. You are free to use, modify, and distribute it under the Apache 2.0 license. However, we kindly ask that you:
+
+- ✅ **Respect the creator**: Maintain attribution to Lotus (berzersks) in all derivative works
+- ✅ **Keep copyright notices**: Do not remove or alter copyright notices and attributions
+- ✅ **Unite the community**: Consider contributing improvements to the official repository rather than creating fragmented forks
+- ✅ **Submit pull requests**: Help make this project better for everyone by contributing at [github.com/spechshop/libspech](https://github.com/spechshop/libspech)
+- ✅ **Reference the creator**: Credit the original author when discussing or referencing this software
+
+A unified community is stronger and advances faster together. Thank you for helping build a respectful and collaborative open source project!
+
+See [LICENSE.txt](LICENSE.txt) for full license terms.
+
+### Third-Party Dependencies
+
+Third-party components are under their respective licenses:
+- Swoole: Apache License 2.0
+- bcg729: GNU GPL v3.0
+- Opus: BSD License
+- psampler: See repository for details
+
 
 ### Important Notice to the Community
 
