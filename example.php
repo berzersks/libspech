@@ -22,8 +22,7 @@ include 'plugins/autoloader.php';
         $username = getenv('SIP_USERNAME') ?: '';
         $password = getenv('SIP_PASSWORD') ?: '';
         $domain = getenv('SIP_HOST') ?: 'spechshop.com';
-        var_dump($domain, filter_var($domain, FILTER_VALIDATE_IP));
-        if (!filter_var($domain, FILTER_VALIDATE_IP)) {
+         if (!filter_var($domain, FILTER_VALIDATE_IP)) {
             $host = gethostbyname($domain);
         } else {
             $host = $domain;
@@ -69,21 +68,25 @@ include 'plugins/autoloader.php';
         });
         $phone->mountLineCodecSDP('PCMU/8000');
         $phone->onReceivePcm(function ($pcmData, $peer, trunkController $phone) use (&$audioBuffer) {
-            cli::pcl("Recebendo áudio: " . strlen($pcmData) . " bytes de {$peer['port']} {$phone->codecName}", "yellow");
-            $audioBuffer .= $pcmData;
+  
+            
+
+            // optional
+//            $audioBuffer .= $pcmData;
         });
         $phone->onAnswer(function (trunkController $phone) {
             $phone->receiveMedia();
             $phone->defineAudioFile('music.wav');
             cli::pcl("Chamada aceita", "green");
             \libspech\Sip\interruptibleSleep(100, $phone->receiveBye);
-            $phone->send2833(42017165204, 160);
+            $phone->send2833('*', 160);
+            $phone->send2833(999999999, 160);
             \libspech\Sip\interruptibleSleep(30, $phone->receiveBye);
         });
         $phone->onKeyPress(function ($event, $peer) use ($phone) {
             cli::pcl("Digitando: " . $event, "yellow");
         });
-        $phone->call('5569984477329');
+        $phone->call('551140040104');
 
 
         cli::pcl("Script finalizado", "green");
