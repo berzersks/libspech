@@ -1436,7 +1436,7 @@ class trunkController
                     default => $rtpc->payloadRaw,
                 };
 
-                cli::pcl($codec . ' ' . $rtpc->sequence . ' ' . strlen($rtpc->payloadRaw) . ' bytes -> ' . strlen($pcmData) . ' pcm', 'blue');
+               // cli::pcl($codec . ' ' . $rtpc->sequence . ' ' . strlen($rtpc->payloadRaw) . ' bytes -> ' . strlen($pcmData) . ' pcm', 'blue');
                 //$this->mediaChannel->onReceiveCallable = $this->onReceivePcmCallback;
 
 
