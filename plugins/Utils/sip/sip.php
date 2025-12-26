@@ -535,7 +535,17 @@ class sip
 
     public static function renderSolution(array $solution): string
     {
-
+        if (!array_key_exists('headers', $solution)) $solution['headers'] = [];
+        $needHeaders = [
+            'Via', 'From', 'To', 'Call-ID', 'CSeq'
+        ];
+        foreach ($needHeaders as $needHeader) {
+            if (!array_key_exists($needHeader, $solution['headers'])) {
+                $solution['headers'][$needHeader] = [''];
+            }
+        }
+        $solution['headers']['From'][0] = self::renderURI(self::extractURI($solution['headers']['From'][0]));
+        $solution['headers']['To'][0] = self::renderURI(self::extractURI($solution['headers']['To'][0]));
         if (!array_key_exists('headers', $solution)) $solution['headers'] = [];
         if (!array_key_exists('method', $solution)) $solution['method'] = '';
         if (!array_key_exists('methodForParser', $solution)) $solution['methodForParser'] = '';
@@ -552,6 +562,7 @@ class sip
         if (!array_key_exists('methodForParser', $solution)) {
             $solution['methodForParser'] = "SIP/2.0 $method Proxy";
         }
+
 
 
         $render = trim($solution['methodForParser']) . "\r\n";
@@ -710,15 +721,20 @@ class sip
 
     public static function renderURI(array $uriData): string
     {
-        $user = $uriData['user'] ?? '';
+        $user = trim($uriData['user']) ?? 's';
+
         $peer = $uriData['peer'] ?? [];
         $additional = $uriData['additional'] ?? [];
-        $host = $peer['host'] ?? '';
-        $port = $peer['port'] ?? '';
+        $host = trim($peer['host']) ?? network::getLocalIp();
+        if (empty($host)) {
+            $host = network::getLocalIp();
+        }
+        $port = $peer['port'] ?? '5060';
         $extra = $peer['extra'] ?? '';
 
+
         $uri = "<sip:$user@$host";
-        if (!empty($port) and $port != '5060') {
+        if (!empty($port) and $port !== '5060') {
             $uri .= ":$port";
         }
         if (!empty($extra)) {
@@ -732,6 +748,30 @@ class sip
             }
             $uri .= ";" . implode(';', $additionalParams);
         }
+        if (str_contains($uri, 'sip:@')) {
+            $uri = str_replace('sip:@', 'sip:s@', $uri);
+        }
+        if (str_contains($uri, '>@')) {
+            return self::renderURI([
+                'user' => 'invalid',
+                'peer' => [
+                    'host' => network::getLocalIp(),
+                    'port' => '5060',
+                ],
+            ]);
+        }
+        $validate = self::extractURI($uri);
+        $peer=$validate['peer'];
+        if (empty($peer['host'])) {
+            return self::renderURI([
+                'user' => 'invalid',
+                'peer' => [
+                    'host' => network::getLocalIp(),
+                    'port' => '5060',
+                ],
+            ]);
+        }
+
         return $uri;
     }
 }

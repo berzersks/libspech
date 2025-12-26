@@ -14,7 +14,7 @@ class MediaChannel
 {
     public bool $active = true;
 
-    public int $connectTimeout = 10;
+    public int $connectTimeout = 5;
 
     public function onReceive(callable $callback): void
     {
@@ -118,15 +118,7 @@ class MediaChannel
     private array $lastVadActivity = [];
     private int $vadTimeoutSeconds = 10;
     private float $vadRegistrationThreshold = 2.0;
-    public array $rChannels = [];
-    private array $timeoutHistory = [];
-    private int $consecutiveTimeouts = 0;
-    private float $adaptiveTimeoutBase = 2.0;
-    private int $maxConsecutiveTimeouts = 5;
-    private int $connectionHealthScore = 100;
-    private array $packetLossWindow = [];
-    private int $windowSize = 50;
-    private float $lastValidPacketTime = 0;
+
 
     public function block($callback = null): void
     {
@@ -183,7 +175,7 @@ class MediaChannel
     public array $rtpChans = [];
     public Socket $eventSock;
 
-    public function __construct(Socket $socket, string $callId)
+    public function __construct(Socket &$socket, string $callId)
     {
 
         $this->socket = $socket;
@@ -314,14 +306,19 @@ class MediaChannel
             while (true) {
 
 
-                $packet = $this->socket->recvfrom($peer, 0.2);
-
 
                 $currentTime = microtime(true);
+                $packet = $this->socket->recvfrom($peer, 1);
+
+
+
+
+
                 if (!$packet) {
                     // timeout de 3s
 
-                    if ($currentTime - $lastPacketTime > $this->connectTimeout) {
+                    if (($currentTime - $lastPacketTime) > $this->connectTimeout) {
+                        $calculate = ($currentTime - $lastPacketTime);
 
                         // encerrar
                         $this->unblock();
@@ -330,7 +327,7 @@ class MediaChannel
                         if (is_callable($this->packetOnTimeoutCallable)) {
                             go($this->packetOnTimeoutCallable, $this->callId);
                         }
-                        cli::pcl("TIMEOUT: no packets received for {$this->connectTimeout} seconds", 'bold_red');
+                        cli::pcl("TIMEOUT: no packets received for $calculate seconds, exceed: " . $this->connectTimeout, 'bold_red');
                         return;
 
                     }
@@ -342,27 +339,24 @@ class MediaChannel
                         cli::pcl("TIMEOUT: no members to send silence to", 'bold_red');
                         continue;
                     }
-                    $buffer = $this->members[$expectedMember]['rtpChannel']->buildAudioPacket(str_repeat("\x00", 160));
-                    $this->socket->sendto($expectedMember, $this->members[$expectedMember]['port'], $buffer);
-                    $packet = $this->socket->recvfrom($peer, 1);
-                    if (!$packet) {
-                        $this->unblock();
-                        $this->socket->close();
-                        $this->eventSock->close();
-                        if (is_callable($this->packetOnTimeoutCallable)) {
-                            go($this->packetOnTimeoutCallable, $this->callId);
-                        }
-                        cli::pcl("TIMEOUT: no packets received for {$this->connectTimeout} seconds", 'bold_red');
-                        return;
+
+
+                    $end = microtime(true);
+                    $calculate = ($end - $currentTime) * 1000;
+                    if ($calculate < 0.01) {
+                        // 0.000
+                        $calculate = number_format($calculate, 3);
                     }
-
-                    cli::pcl("TIMEOUT: sending silence to {$expectedMember}", 'bold_red');
-
+                    $buffer = $this->members[$expectedMember]['rtpChannel']->buildAudioPacket(str_repeat("\x00", 160));
+                    $this->socket->sendto($this->members[$expectedMember]['address'], $this->members[$expectedMember]['port'], $buffer);
+                    cli::pcl("[".date('H:i:s')."] TIMEOUT: sending silence to {$expectedMember} diff: {$calculate}ms", 'bold_red');
+                    continue;
+                } else {
+                    $lastPacketTime = microtime(true);
                 }
 
 
                 $this->packetsProcessed++;
-                $lastPacketTime = microtime(true);
                 $idFrom = "{$peer['address']}:{$peer['port']}";
                 $this->audioMetrics['total_packets']++;
 
@@ -405,7 +399,12 @@ class MediaChannel
                 $pcmData = false;
 
 
-                if (is_callable($this->onReceiveCallable)) go($this->onReceiveCallable, $rtpc, $peer, $this, $this->rtpChans[$ssrc]);
+                if ($this->onReceiveCallable) {
+                    go(function () use ($rtpc, $peer, $ssrc) {
+                        call_user_func($this->onReceiveCallable, $rtpc, $peer, $this, $this->rtpChans[$ssrc]);
+                    });
+                }
+
 
                 if (!array_key_exists($rtpc->getCodec(), $this->ptCodecs)) {
                     $member = $this->members[$idFrom] ?? null;
@@ -435,6 +434,7 @@ class MediaChannel
                     // Inicializar canal do destino se não existir
                     if (!isset($destinationChannels[$targetId])) {
                         $destSsrc = $this->generateDeterministicSsrc($targetId);
+                        cli::pcl("$targetId -> SSRC DESTINATION GENERATED: $destSsrc", 'yellow');
                         $destinationChannels[$targetId] = [
                             'ssrc' => $destSsrc,
                             'timestamp' => 0,

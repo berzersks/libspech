@@ -3,7 +3,6 @@
 
 # Sensitive files
 .env
-.env.*
 !.env.example
 config/credentials.*
 credentials.*
